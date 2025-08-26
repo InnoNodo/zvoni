@@ -18,7 +18,7 @@ const remoteVideo = document.getElementById("remoteVideo");
 
 const id = prompt("Введите ваш ID (например, alice или bob):");
 const otherId = prompt("Введите ID собеседника:");
-const ws = new WebSocket(`ws://localhost:8080/ws?id=${id}`);
+const ws = new WebSocket(`ws://3k2oc2-188-130-155-166.ru.tuna.am/ws?id=${id}`);
 
 let pc;
 
@@ -29,7 +29,6 @@ async function startLocalMedia() {
     return stream;
 }
 
-// Создание PeerConnection и настройка обработчиков
 async function startConnection() {
     pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -38,20 +37,17 @@ async function startConnection() {
     const localStream = await startLocalMedia();
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-    // ICE кандидаты
     pc.onicecandidate = (event) => {
         if (event.candidate) {
             ws.send(JSON.stringify({ type: "ice", to: otherId, payload: event.candidate }));
         }
     };
 
-    // Приём удалённого потока
     pc.ontrack = (event) => {
         remoteVideo.srcObject = event.streams[0];
     };
 }
 
-// Инициация звонка (создание offer)
 async function call() {
     await startConnection();
     const offer = await pc.createOffer();
