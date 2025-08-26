@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -9,39 +8,44 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+var clients = make(map[string]*websocket.Conn)
+
 func wsHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("Failed to upgrade:", err)
+		log.Println("Upgrade error:", err)
 		return
 	}
 	defer conn.Close()
+	clients[id] = conn
+	log.Println(id, "connected")
 
 	for {
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("Failed to read:", err)
+		var msg map[string]interface{}
+		if err := conn.ReadJSON(&msg); err != nil {
+			log.Println("ReadJSON error:", err)
+			delete(clients, id)
 			break
 		}
 
-		fmt.Printf("New message: %s\n", msg)
-
-		err = conn.WriteMessage(websocket.TextMessage, msg)
-		if err != nil {
-			log.Println("Failed to send:", err)
-			break
+		to, ok := msg["to"].(string)
+		if ok && clients[to] != nil {
+			clients[to].WriteJSON(msg)
 		}
 	}
 }
 
 func main() {
 	http.HandleFunc("/ws", wsHandler)
-
-	fmt.Println("Server started on :8080")
+	log.Println("Server started on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
