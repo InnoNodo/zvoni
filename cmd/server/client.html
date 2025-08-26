@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mini WebRTC Test</title>
+<style>
+  video { width: 45%; margin: 5px; background: black; }
+</style>
+</head>
+<body>
+<h1>Mini WebRTC Test</h1>
+<video id="localVideo" autoplay muted></video>
+<video id="remoteVideo" autoplay></video>
+
+<script>
+const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+
+const id = prompt("Введите ваш ID (например, alice или bob):");
+const otherId = prompt("Введите ID собеседника:");
+const ws = new WebSocket(`ws://localhost:8080/ws?id=${id}`);
+
+let pc;
+
+// Получение локального медиа
+async function startLocalMedia() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = stream;
+    return stream;
+}
+
+// Создание PeerConnection и настройка обработчиков
+async function startConnection() {
+    pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+
+    const localStream = await startLocalMedia();
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    // ICE кандидаты
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            ws.send(JSON.stringify({ type: "ice", to: otherId, payload: event.candidate }));
+        }
+    };
+
+    // Приём удалённого потока
+    pc.ontrack = (event) => {
+        remoteVideo.srcObject = event.streams[0];
+    };
+}
+
+// Инициация звонка (создание offer)
+async function call() {
+    await startConnection();
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({ type: "offer", to: otherId, from: id, payload: offer }));
+}
+
+// Обработка сообщений от сервера
+ws.onmessage = async (event) => {
+    const msg = JSON.parse(event.data);
+    if (!pc) await startConnection();
+
+    if (msg.type === "offer") {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.payload));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send(JSON.stringify({ type: "answer", to: msg.from, from: id, payload: answer }));
+    } else if (msg.type === "answer") {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.payload));
+    } else if (msg.type === "ice") {
+        try {
+            await pc.addIceCandidate(msg.payload);
+        } catch (e) {
+            console.error("Error adding ICE candidate", e);
+        }
+    }
+};
+
+// Авто-звонок через несколько секунд
+setTimeout(() => { call(); }, 1000);
+
+</script>
+</body>
+</html>
