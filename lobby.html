@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Lobby</title>
+<style>
+  body { display: flex; flex-direction: column; align-items: center; font-family: sans-serif; margin: 0; padding: 20px; }
+  video { width: 300px; height: 200px; border: 1px solid #ccc; margin: 10px; background: black; }
+  #videos { display: flex; gap: 20px; }
+</style>
+</head>
+<body>
+<h1 id="lobbyTitle">Lobby</h1>
+<div id="videos">
+  <video id="localVideo" autoplay playsinline muted></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+</div>
+
+<script>
+const lobbyID = window.location.pathname.split("/").pop();
+document.getElementById("lobbyTitle").innerText = "Lobby " + lobbyID;
+
+const ws = new WebSocket(`ws://localhost:8080/ws?lobbyID=${lobbyID}`);
+
+ws.onopen = () => console.log("✅ Connected to signaling server");
+ws.onmessage = (msg) => console.log("📩 Message:", msg.data);
+
+// Получение локального потока
+async function startLocalStream() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    document.getElementById("localVideo").srcObject = stream;
+    window.localStream = stream;
+  } catch (err) {
+    console.error("Ошибка доступа к медиа:", err);
+  }
+}
+
+startLocalStream();
+</script>
+</body>
+</html>
